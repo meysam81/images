@@ -104,6 +104,10 @@ jobs:
             "aquasec/trivy:${TRIVY_VERSION}" image --quiet --timeout 30m \
             --scanners vuln --pkg-types os --ignore-unfixed \
             --severity HIGH,CRITICAL --exit-code 1 "check/$NAME"
+      # An image can bring checks its build cannot run (ones that need Docker).
+      - name: The image's own tests
+        if: hashFiles(format('images/{0}/test.sh', matrix.image.name)) != ''
+        run: '"images/$NAME/test.sh"'
       - name: Publish, sign, attest
         if: github.event_name != 'pull_request'
         uses: meysam81/build-docker@e1a24e3e00108b76f3d174ed4b723881f97c1b91 # v1.7.0
