@@ -71,7 +71,9 @@ One directory, one file: `images/<name>/Dockerfile`. CI finds it by itself.
   an upstream binary compiles in (a Go module, a bundled tool) is not gated:
   only upstream, or a fork that rebuilds from source, can fix it.
 - `kratos` is compiled from source, so its build also runs upstream's unit
-  tests against the modules it bumps; a failure publishes nothing.
+  tests against the modules it bumps, and its `test.sh` migrates a Postgres
+  database with the built image and logs in through it (upstream's tests run
+  on SQLite); a failure publishes nothing.
 - `main`, the weekly schedule and manual runs do the same, then publish for
   `linux/amd64` and `linux/arm64`, sign with cosign and attach the SBOM and
   provenance.
