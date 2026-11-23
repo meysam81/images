@@ -1,0 +1,124 @@
+name: ci
+
+# Every image is rebuilt from scratch and republished weekly, because the
+# rebuild is the patch: `apk upgrade` / `apt-get upgrade` only pick up a fix
+# when the layer runs again. Run it by hand for a fix that cannot wait.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    # Sunday night, so Monday's Renovate run in the consuming repos sees the
+    # new digests.
+    - cron: "0 22 * * 0"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lint:
+    name: secrets, workflows, Dockerfiles
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      # renovate: docker=ghcr.io/gitleaks/gitleaks
+      GITLEAKS_VERSION: v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+      # renovate: docker=rhysd/actionlint
+      ACTIONLINT_VERSION: 1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+      # renovate: docker=hadolint/hadolint
+      HADOLINT_VERSION: v2.15.1@sha256:32dac94127fd60b7b7e3fbfc65e1383b9b5e25c9bfd7b8536de7a539fe68a12d
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: gitleaks (whole history)
+        run: |
+          docker run --rm -v "$PWD:/repo:ro" \
+            "ghcr.io/gitleaks/gitleaks:${GITLEAKS_VERSION}" git /repo --redact --no-banner --log-opts=HEAD
+      - name: actionlint
+        run: docker run --rm -v "$PWD:/repo:ro" -w /repo "rhysd/actionlint:${ACTIONLINT_VERSION}" -color
+      - name: hadolint
+        # The image has no shell: the runner expands the glob.
+        run: |
+          docker run --rm -v "$PWD:/repo:ro" -w /repo \
+            "hadolint/hadolint:${HADOLINT_VERSION}" hadolint images/*/Dockerfile
+      - uses: zizmorcore/zizmor-action@53290badfa369cb0bf7ad16342cb62c2fa47ac7b # v0.8.0
+        with:
+          # No version: the action maps its default to an image it pins by
+          # digest, so zizmor moves with the action's own pin (one Renovate PR).
+          advanced-security: "false"
+
+  matrix:
+    name: list the images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      images: ${{ steps.matrix.outputs.images }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: matrix
+        run: ./scripts/matrix.sh >> "$GITHUB_OUTPUT"
+
+  image:
+    name: ${{ matrix.image.name }}
+    needs: [lint, matrix]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      # cosign signs keyless, with this run's identity.
+      id-token: write
+    strategy:
+      # One image failing its gate must not hold back a fix in another.
+      fail-fast: false
+      matrix:
+        image: ${{ fromJSON(needs.matrix.outputs.images) }}
+    env:
+      NAME: ${{ matrix.image.name }}
+      DOCKER_BUILD_SUMMARY: "false"
+      DOCKER_BUILD_RECORD_UPLOAD: "false"
+      # renovate: docker=aquasec/trivy
+      TRIVY_VERSION: 0.76.2@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The Dockerfile's own checks run here (a wrong VERSION fails the build).
+      - name: Build
+        run: docker build --pull --no-cache -t "check/$NAME" "images/$NAME"
+      # The gate is what this repo controls: the OS packages. A fix that
+      # exists and is missing means the upgrade layer did not do its job. What
+      # an upstream binary compiles in is upstream's to fix and is not gated.
+      - name: No OS package is missing an available high or critical fix
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            "aquasec/trivy:${TRIVY_VERSION}" image --quiet --timeout 30m \
+            --scanners vuln --pkg-types os --ignore-unfixed \
+            --severity HIGH,CRITICAL --exit-code 1 "check/$NAME"
+      - name: Publish, sign, attest
+        if: github.event_name != 'pull_request'
+        uses: meysam81/build-docker@e1a24e3e00108b76f3d174ed4b723881f97c1b91 # v1.7.0
+        with:
+          checkout: "false"
+          context: images/${{ matrix.image.name }}
+          image-name: ghcr.io/${{ github.repository }}/${{ matrix.image.name }}
+          metadata-tags: type=raw,value=${{ matrix.image.version }}
+          pull: "true"
+          # A cached upgrade layer is a stale one: this scope never exists,
+          # so nothing is reused, and nothing is stored for the next run.
+          cache-from: type=gha,scope=none-${{ github.run_id }}
+          cache-to: type=inline
+          cosign: true
+          # SBOM and SLSA provenance ride in the pushed index as attestation
+          # manifests; mode=max records the build args (no secrets here).
+          sbom: "true"
+          provenance: mode=max

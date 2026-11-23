@@ -1,0 +1,20 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "customManagers": [
+    {
+      "customType": "regex",
+      "datasourceTemplate": "{{{datasource}}}",
+      "description": "The tag an image is published under: `# image-version: <datasource>=<package>` above `ARG VERSION=`.",
+      "managerFilePatterns": [
+        "/^images/[^/]+/Dockerfile$/"
+      ],
+      "matchStrings": [
+        "# image-version: (?<datasource>[a-z-]+)=(?<depName>\\S+)(?: versioning=(?<versioning>\\S+))?\\nARG VERSION=(?<currentValue>\\S+)"
+      ],
+      "versioningTemplate": "{{#if versioning}}{{{versioning}}}{{else}}docker{{/if}}"
+    }
+  ],
+  "extends": [
+    "github>meysam81/.github"
+  ]
+}

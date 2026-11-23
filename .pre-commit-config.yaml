@@ -1,0 +1,76 @@
+ci:
+  autofix_commit_msg: |
+    [pre-commit.ci] auto fixes from pre-commit.com hooks
+
+    [skip ci]
+  autofix_prs: true
+  autoupdate_commit_msg: |
+    [pre-commit.ci] pre-commit autoupdate
+
+    [skip ci]
+  autoupdate_schedule: weekly
+  # pre-commit.ci has no bun. hadolint runs in CI, from an image pinned by digest.
+  skip:
+    - prettier
+  submodules: false
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c # frozen: v6.0.0
+    hooks:
+      - id: check-added-large-files
+        args: ["--maxkb=800"]
+      - id: check-case-conflict
+      - id: check-executables-have-shebangs
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-shebang-scripts-are-executable
+      - id: check-symlinks
+      - id: check-vcs-permalinks
+      - id: check-yaml
+      - id: destroyed-symlinks
+      - id: detect-aws-credentials
+        args:
+          - --allow-missing-credentials
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: fix-byte-order-marker
+      - id: forbid-new-submodules
+      - id: forbid-submodules
+      - id: mixed-line-ending
+      - id: pretty-format-json
+        args:
+          - --autofix
+      - id: trailing-whitespace
+  - repo: https://github.com/alessandrojcm/commitlint-pre-commit-hook
+    rev: 1f6454da22d006d5bb0d2e65c96c43c23c8a534f # frozen: v9.24.0
+    hooks:
+      - id: commitlint
+        language: node
+        stages: [commit-msg]
+        additional_dependencies: ["@commitlint/config-conventional@21.2.4"]
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: 83d9cd684c87d95d656c1458ef04895a7f1cbd8e # frozen: v8.30.1
+    hooks:
+      - id: gitleaks
+  - repo: https://github.com/rhysd/actionlint
+    rev: 393031adb9afb225ee52ae2ccd7a5af5525e03e8 # frozen: v1.7.11
+    hooks:
+      - id: actionlint
+  - repo: https://github.com/reteps/dockerfmt
+    rev: 21be1f69cec5e77953bdb40a2f1d95de0eeb56ac # frozen: v0.3.9
+    hooks:
+      - id: dockerfmt
+        args:
+          - --indent=4
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: 745eface02aef23e168a8afb6b5737818efbea95 # frozen: v0.11.0.1
+    hooks:
+      - id: shellcheck
+  - repo: local
+    hooks:
+      - id: prettier
+        name: prettier
+        language: system
+        pass_filenames: true
+        entry: bunx prettier -u --write
