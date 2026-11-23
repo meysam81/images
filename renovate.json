@@ -4,14 +4,14 @@
     {
       "customType": "regex",
       "datasourceTemplate": "{{{datasource}}}",
-      "description": "The tag an image is published under: `# image-version: <datasource>=<package>` above `ARG VERSION=`.",
+      "description": "The tag an image is published under: `# image-version: <datasource>=<package>` above `ARG VERSION=`, with the commit that tag must point at in `ARG COMMIT=` below it where the Dockerfile builds from source.",
       "managerFilePatterns": [
         "/^images/[^/]+/Dockerfile$/"
       ],
       "matchStrings": [
-        "# image-version: (?<datasource>[a-z-]+)=(?<depName>\\S+)(?: versioning=(?<versioning>\\S+))?\\nARG VERSION=(?<currentValue>\\S+)"
+        "# image-version: (?<datasource>[a-z-]+)=(?<depName>\\S+)(?: versioning=(?<versioning>\\S+))?\\nARG VERSION=(?<currentValue>\\S+)(?:\\nARG COMMIT=(?<currentDigest>[0-9a-f]{40}))?"
       ],
-      "versioningTemplate": "{{#if versioning}}{{{versioning}}}{{else}}docker{{/if}}"
+      "versioningTemplate": "{{#if versioning}}{{{versioning}}}{{else if (equals datasource 'docker')}}docker{{else}}semver-coerced{{/if}}"
     }
   ],
   "extends": [

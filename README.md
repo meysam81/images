@@ -2,7 +2,8 @@
 
 Container images we publish because upstream's are not good enough to run:
 either the software has no small image of its own, or upstream's image sits on
-a base that is stale or end of life. Nothing here changes an upstream
+a base that is stale or end of life, or its binary is compiled once per
+release and keeps that day's Go and modules. Nothing here changes an upstream
 program's code. A change to the code belongs in a fork of that project.
 
 Every image is rebuilt from scratch and republished every Sunday night, and on
@@ -11,11 +12,11 @@ upgrade, so a fix the distribution has shipped lands within a week without
 anyone touching this repo. For a fix that cannot wait, run the `ci` workflow
 by hand.
 
-| Image                                | What it is                                                     |
-| ------------------------------------ | -------------------------------------------------------------- |
-| `ghcr.io/meysam81/images/rsync`      | rsync on Alpine and nothing else: no curl, no ssh client       |
-| `ghcr.io/meysam81/images/kratos`     | Ory Kratos' own binary with SQLite, on a supported Alpine      |
-| `ghcr.io/meysam81/images/postiz-app` | Postiz as upstream ships it, with its Debian packages upgraded |
+| Image                                | What it is                                                                                                                  |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| `ghcr.io/meysam81/images/rsync`      | rsync on Alpine and nothing else: no curl, no ssh client                                                                    |
+| `ghcr.io/meysam81/images/kratos`     | Ory Kratos compiled from upstream's release source with a current Go and current security-relevant modules, SQLite included |
+| `ghcr.io/meysam81/images/postiz-app` | Postiz as upstream ships it, with its Debian packages upgraded                                                              |
 
 `postiz-app` redistributes [Postiz](https://github.com/gitroomhq/postiz-app)
 (AGPL-3.0) unchanged apart from its OS packages; its source is upstream's, at
@@ -56,6 +57,9 @@ One directory, one file: `images/<name>/Dockerfile`. CI finds it by itself.
     patch release needs no change. Where the tag follows an upstream image,
     put `# image-version: docker=<image>` on the line above and Renovate moves
     it together with the `FROM` (see `kratos`).
+- A check the build cannot run (one that needs Docker) goes in an executable
+  `images/<name>/test.sh`. CI runs it after the build and before publishing
+  (see `kratos`).
 - After its first publish, make the package public once: GitHub creates every
   package private. Package settings, Danger Zone, Change visibility. This
   cannot be undone.
@@ -66,6 +70,8 @@ One directory, one file: `images/<name>/Dockerfile`. CI finds it by itself.
   high or critical fix that exists. That is the part this repo controls. What
   an upstream binary compiles in (a Go module, a bundled tool) is not gated:
   only upstream, or a fork that rebuilds from source, can fix it.
+- `kratos` is compiled from source, so its build also runs upstream's unit
+  tests against the modules it bumps; a failure publishes nothing.
 - `main`, the weekly schedule and manual runs do the same, then publish for
   `linux/amd64` and `linux/arm64`, sign with cosign and attach the SBOM and
   provenance.
